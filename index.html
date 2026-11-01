@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Live FX Signal Terminal · Real Market Data</title>
+<style>
+  :root{
+    --bg-0:#06080c; --bg-1:#0b1018; --bg-2:#111826; --bg-3:#1a2332;
+    --line:#1e2a40; --line-2:#2a3856;
+    --text:#e8eef8; --dim:#8a97ad; --mute:#566279;
+    --green:#00e28a; --green-g:#00ff9d;
+    --red:#ff3b5c;   --red-g:#ff5677;
+    --yellow:#ffc857; --blue:#3ea6ff; --purple:#b07bff; --cyan:#2ee6d6;
+    --r:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;width:100%;overflow:hidden;background:var(--bg-0);color:var(--text);
+    font-family:"Segoe UI","SF Pro Display",system-ui,Roboto,Arial,sans-serif;font-size:13px;
+    -webkit-font-smoothing:antialiased}
+  button,input,select{font-family:inherit;font-size:inherit;color:inherit}
+  button{cursor:pointer;border:none;background:none}
+
+  #app{
+    position:fixed;inset:0;display:grid;
+    grid-template-rows:56px 1fr 160px;
+    grid-template-columns:1fr 330px;
+    grid-template-areas:"top top" "chart sig" "low sig";
+    gap:8px;padding:8px;
+    background:
+      radial-gradient(1200px 600px at 15% 0%, rgba(62,166,255,.06), transparent 60%),
+      radial-gradient(900px 500px at 100% 100%, rgba(0,226,138,.05), transparent 60%),
+      var(--bg-0);
+    transition:all .25s ease;
+  }
+  #app.float{
+    inset:auto;top:12px;right:12px;width:min(1180px,94vw);height:min(760px,90vh);
+    border-radius:14px;border:1px solid var(--line-2);
+    box-shadow:0 24px 80px rgba(0,0,0,.7);
+    background:rgba(6,8,12,.94);backdrop-filter:blur(16px);
+    grid-template-rows:50px 1fr 140px;
+  }
+  #app.float .panel{background:rgba(11,16,24,.65)}
+
+  /* Top bar */
+  #top{grid-area:top;display:flex;align-items:center;gap:14px;padding:0 14px;
+    background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+  .logo{width:30px;height:30px;border-radius:8px;
+    background:conic-gradient(from 180deg,var(--green),var(--blue),var(--purple),var(--green));
+    box-shadow:0 0 16px rgba(0,226,138,.4),inset 0 0 10px rgba(0,0,0,.4);position:relative}
+  .logo::after{content:"";position:absolute;inset:5px;border-radius:5px;background:var(--bg-0)}
+  .logo::before{content:"◆";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:var(--green);font-size:11px;z-index:2;text-shadow:0 0 8px var(--green-g)}
+  .brand .t1{font-size:14px;letter-spacing:.4px}
+  .brand .t2{font-size:11px;color:var(--dim);font-weight:500}
+  .sep{width:1px;height:28px;background:var(--line)}
+  .cg{display:flex;align-items:center;gap:6px}
+  .cg label{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px}
+  select,.btn{background:var(--bg-2);border:1px solid var(--line);color:var(--text);
+    padding:7px 12px;border-radius:7px;transition:all .15s;font-weight:500}
+  select:hover,.btn:hover{border-color:var(--line-2);background:var(--bg-3)}
+  select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 2px rgba(62,166,255,.2)}
+  .tf-btn{padding:6px 11px;font-size:12px;font-weight:600}
+  .tf-btn.on{background:linear-gradient(180deg,rgba(62,166,255,.22),rgba(62,166,255,.05));
+    border-color:var(--blue);color:var(--blue);box-shadow:0 0 12px rgba(62,166,255,.25)}
+  .spacer{flex:1}
+  .pill{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:20px;
+    font-size:11px;font-weight:600;letter-spacing:.5px}
+  .pill.live{background:rgba(0,226,138,.08);border:1px solid rgba(0,226,138,.25);color:var(--green)}
+  .pill.warn{background:rgba(255,200,87,.08);border:1px solid rgba(255,200,87,.25);color:var(--yellow)}
+  .pill.err{background:rgba(255,59,92,.08);border:1px solid rgba(255,59,92,.25);color:var(--red)}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor;
+    box-shadow:0 0 10px currentColor;animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+  .ibtn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+    border-radius:8px;background:var(--bg-2);border:1px solid var(--line);font-size:15px;transition:all .15s}
+  .ibtn:hover{background:var(--bg-3);border-color:var(--line-2)}
+  .ibtn.on{background:rgba(62,166,255,.15);border-color:var(--blue);color:var(--blue)}
+
+  /* Panels */
+  .panel{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;position:relative}
+  #chartWrap{grid-area:chart;display:flex;flex-direction:column}
+  #chHead{display:flex;align-items:center;gap:16px;padding:10px 14px;border-bottom:1px solid var(--line);
+    background:rgba(0,0,0,.15)}
+  .pb{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.3px;transition:color .2s}
+  .pb.up{color:var(--green);text-shadow:0 0 14px rgba(0,226,138,.4)}
+  .pb.dn{color:var(--red);text-shadow:0 0 14px rgba(255,59,92,.4)}
+  .ohlc{display:flex;gap:14px;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .ohlc b{color:var(--text);font-weight:600;margin-left:4px}
+  .legend{display:flex;gap:14px;margin-left:auto;font-size:11px;color:var(--dim)}
+  .legend i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  #chart{flex:1;display:block;width:100%;cursor:crosshair}
+
+  /* Lower */
+  #low{grid-area:low;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .sub{display:flex;flex-direction:column}
+  .sub-h{padding:6px 12px;border-bottom:1px solid var(--line);font-size:11px;color:var(--dim);
+    display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,.15);
+    letter-spacing:.5px;text-transform:uppercase;font-weight:600}
+  .sub-h b{color:var(--text);font-variant-numeric:tabular-nums}
+  .sub canvas{flex:1;display:block;width:100%}
+
+  /* Signal panel */
+  #sig{grid-area:sig;display:flex;flex-direction:column;gap:8px}
+  .card{padding:14px;background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r)}
+  .card h3{font-size:11px;letter-spacing:1.2px;color:var(--dim);text-transform:uppercase;
+    margin-bottom:10px;font-weight:600;display:flex;align-items:center;gap:6px}
+  .card h3::before{content:"";width:4px;height:12px;background:var(--blue);border-radius:2px;box-shadow:0 0 8px var(--blue)}
+
+  #sbox{position:relative;padding:22px 18px;text-align:center;border-radius:12px;
+    transition:all .35s cubic-bezier(.2,.8,.2,1);overflow:hidden;border:2px solid transparent}
+  #sbox::before{content:"";position:absolute;inset:0;opacity:.15;pointer-events:none;
+    background:radial-gradient(circle at 50% 30%, currentColor, transparent 70%)}
+  #sbox.call{background:linear-gradient(180deg,rgba(0,226,138,.18),rgba(0,226,138,.04));
+    border-color:rgba(0,226,138,.5);color:var(--green);box-shadow:0 0 30px rgba(0,226,138,.25),inset 0 0 30px rgba(0,226,138,.08)}
+  #sbox.put{background:linear-gradient(180deg,rgba(255,59,92,.18),rgba(255,59,92,.04));
+    border-color:rgba(255,59,92,.5);color:var(--red);box-shadow:0 0 30px rgba(255,59,92,.25),inset 0 0 30px rgba(255,59,92,.08)}
+  #sbox.wait{background:linear-gradient(180deg,rgba(138,151,173,.12),rgba(138,151,173,.03));
+    border-color:rgba(138,151,173,.35);color:var(--dim);box-shadow:none}
+  .slbl{font-size:11px;letter-spacing:2px;opacity:.8;font-weight:600}
+  .sdir{font-size:34px;font-weight:800;letter-spacing:1px;margin:6px 0;text-shadow:0 0 20px currentColor;line-height:1}
+  .sdir .e{font-size:30px;vertical-align:middle;margin-right:6px}
+  .ssub{font-size:11px;color:var(--dim);letter-spacing:.5px;line-height:1.4}
+  .sexp{margin-top:8px;font-size:11px;color:var(--text);font-variant-numeric:tabular-nums;
+    padding:6px 10px;background:rgba(0,0,0,.2);border-radius:6px;display:inline-block}
+
+  .meter{margin-top:12px}
+  .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .mh .l{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px}
+  .mh .v{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
+  .mb{height:10px;background:var(--bg-3);border-radius:6px;overflow:hidden;position:relative}
+  .mf{height:100%;border-radius:6px;transition:width .5s cubic-bezier(.2,.8,.2,1),background .3s;
+    position:relative;box-shadow:0 0 10px currentColor}
+  .mf::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);animation:shim 2s infinite}
+  @keyframes shim{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+  .il{display:flex;flex-direction:column;gap:6px}
+  .ir{display:grid;grid-template-columns:78px 1fr 56px;align-items:center;gap:8px;font-size:11px}
+  .ir .n{color:var(--dim);font-weight:600;letter-spacing:.5px}
+  .ir .b{height:6px;background:var(--bg-3);border-radius:4px;overflow:hidden;position:relative}
+  .ir .bf{height:100%;border-radius:4px;transition:width .4s ease}
+  .ir .vl{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .ir.up .bf{background:linear-gradient(90deg,var(--green),var(--green-g))}
+  .ir.up .vl{color:var(--green)}
+  .ir.dn .bf{background:linear-gradient(90deg,var(--red),var(--red-g))}
+  .ir.dn .vl{color:var(--red)}
+  .ir.flat .bf{background:linear-gradient(90deg,var(--yellow),#ffdc85)}
+  .ir.flat .vl{color:var(--yellow)}
+
+  #log{flex:1;min-height:0;overflow-y:auto}
+  .le{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:6px;
+    margin-bottom:4px;font-size:11px;background:var(--bg-2);border:1px solid var(--line)}
+  .le .s{font-weight:700;letter-spacing:.5px}
+  .le.call .s{color:var(--green)}
+  .le.put .s{color:var(--red)}
+  .le .c{color:var(--dim);font-variant-numeric:tabular-nums}
+  .le .tm{color:var(--mute);font-size:10px}
+  #log::-webkit-scrollbar{width:6px}
+  #log::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
+
+  #tip{position:absolute;pointer-events:none;background:rgba(11,16,24,.95);border:1px solid var(--line-2);
+    border-radius:6px;padding:8px 10px;font-size:11px;color:var(--text);font-variant-numeric:tabular-nums;
+    display:none;z-index:100;backdrop-filter:blur(8px);box-shadow:0 6px 20px rgba(0,0,0,.5)}
+  #tip b{color:var(--dim);font-weight:500;margin-right:6px}
+
+  .disclaimer{font-size:10px;color:var(--mute);padding:8px 12px;line-height:1.4;
+    border-top:1px solid var(--line);background:rgba(0,0,0,.2)}
+  .disclaimer b{color:var(--yellow)}
+
+  @media (max-width:960px){
+    #app{grid-template-columns:1fr;grid-template-rows:56px 1fr 140px 300px;
+      grid-template-areas:"top" "chart" "low" "sig"}
+    #low{grid-template-columns:1fr 1fr}
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- TOP -->
+  <div id="top">
+    <div class="brand">
+      <div class="logo"></div>
+      <div>
+        <div class="t1">LIVE FX SIGNAL TERMINAL</div>
+        <div class="t2">Real market data · Deriv WebSocket · High-confluence engine</div>
+      </div>
+    </div>
+    <div class="sep"></div>
+
+    <div class="cg">
+      <label>Symbol</label>
+      <select id="symSel">
+        <option value="frxEURUSD">EUR/USD</option>
+        <option value="frxGBPUSD">GBP/USD</option>
+        <option value="frxUSDJPY">USD/JPY</option>
+        <option value="frxAUDUSD">AUD/USD</option>
+        <option value="frxUSDCHF">USD/CHF</option>
+        <option value="frxEURJPY">EUR/JPY</option>
+        <option value="frxGBPYEN">GBP/JPY</option>
+        <option value="frxEURUSD_OTC">EUR/USD (OTC)</option>
+        <option value="frxGBPUSD_OTC">GBP/USD (OTC)</option>
+        <option value="frxUSDJPY_OTC">USD/JPY (OTC)</option>
+      </select>
+    </div>
+
+    <div class="cg">
+      <label>TF</label>
+      <button class="btn tf-btn on" data-g="60">1m</button>
+      <button class="btn tf-btn" data-g="120">2m</button>
+      <button class="btn tf-btn" data-g="300">5m</button>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="pill live" id="connPill"><span class="dot"></span><span id="connTxt">CONNECTING…</span></div>
+
+    <div class="spacer"></div>
+
+    <button class="ibtn on" id="sndBtn" title="Toggle audio alerts">🔊</button>
+    <button class="ibtn" id="fltBtn" title="Toggle floating overlay">🗗</button>
+  </div>
+
+  <!-- CHART -->
+  <div id="chartWrap" class="panel">
+    <div id="chHead">
+      <div>
+        <div class="pb up" id="pb">—</div>
+      </div>
+      <div class="ohlc">
+        <span>O<b id="oO">—</b></span>
+        <span>H<b id="oH">—</b></span>
+        <span>L<b id="oL">—</b></span>
+        <span>C<b id="oC">—</b></span>
+        <span>Δ<b id="oD">—</b></span>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--blue)"></i>EMA 9</span>
+        <span><i style="background:var(--purple)"></i>EMA 21</span>
+        <span><i style="background:rgba(255,200,87,.7)"></i>BB 20,2</span>
+      </div>
+    </div>
+    <canvas id="chart"></canvas>
+    <div id="tip"></div>
+  </div>
+
+  <!-- LOWER -->
+  <div id="low">
+    <div class="sub panel">
+      <div class="sub-h"><span>RSI (14)</span><b id="rV">—</b></div>
+      <canvas id="rC"></canvas>
+    </div>
+    <div class="sub panel">
+      <div class="sub-h"><span>MACD (12,26,9)</span><b id="mV">—</b></div>
+      <canvas id="mC"></canvas>
+    </div>
+    <div class="sub panel">
+      <div class="sub-h"><span>TICK VELOCITY</span><b id="vV">—</b></div>
+      <canvas id="vC"></canvas>
+    </div>
+  </div>
+
+  <!-- SIGNAL -->
+  <div id="sig">
+    <div class="card">
+      <h3>High-Confluence Signal Engine</h3>
+      <div id="sbox" class="wait">
+        <div class="slbl">CONFLUENCE SIGNAL</div>
+        <div class="sdir"><span class="e">⏳</span><span id="sTxt">INITIALIZING</span></div>
+        <div class="ssub" id="sSub">Awaiting live market data…</div>
+        <div class="sexp" id="sExp" style="display:none">Next expiry: —</div>
+      </div>
+      <div class="meter">
+        <div class="mh">
+          <span class="l">Confluence Score</span>
+          <span class="v" id="cV">0.0%</span>
+        </div>
+        <div class="mb"><div class="mf" id="cF" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Indicator Alignment</h3>
+      <div class="il" id="iL">
+        <div class="ir flat"><span class="n">RSI Zone</span><div class="b"><div class="bf" style="width:50%"></div></div><span class="vl">—</span></div>
+        <div class="ir flat"><span class="n">EMA Cross</span><div class="b"><div class="bf" style="width:50%"></div></div><span class="vl">—</span></div>
+        <div class="ir flat"><span class="n">MACD Hist</span><div class="b"><div class="bf" style="width:50%"></div></div><span class="vl">—</span></div>
+        <div class="ir flat"><span class="n">Bollinger</span><div class="b"><div class="bf" style="width:50%"></div></div><span class="vl">—</span></div>
+        <div class="ir flat"><span class="n">Momentum</span><div class="b"><div class="bf" style="width:50%"></div></div><span class="vl">—</span></div>
+        <div class="ir flat"><span class="n">Price Action</span><div class="b"><div class="bf" style="width:50%"></div></div><span class="vl">—</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="flex:1;min-height:0;display:flex;flex-direction:column">
+      <h3>Signal Log</h3>
+      <div id="log"></div>
+    </div>
+
+    <div class="disclaimer">
+      <b>⚠ RISK DISCLAIMER:</b> No signal system can guarantee profits or 100% accuracy.
+      Trading binary options carries substantial risk of loss. This tool uses public Deriv market
+      data for analysis only. Past signals do not predict future results. Trade only with capital
+      you can afford to lose.
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   LIVE FX SIGNAL TERMINAL
+   Real market data via Deriv public WebSocket API
+   High-confluence multi-indicator signal engine
+   ================================================================ */
+
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const fmt = (v, d=5) => Number(v).toFixed(d);
+const nowS = () => Math.floor(Date.now()/1000);
+
+/* ---------- Symbol metadata ---------- */
+const SYMS = {
+  frxEURUSD:    {dec:5, label:"EUR/USD"},
+  frxGBPUSD:    {dec:5, label:"GBP/USD"},
+  frxUSDJPY:    {dec:3, label:"USD/JPY"},
+  frxAUDUSD:    {dec:5, label:"AUD/USD"},
+  frxUSDCHF:    {dec:5, label:"USD/CHF"},
+  frxEURJPY:    {dec:3, label:"EUR/JPY"},
+  frxGBPYEN:    {dec:3, label:"GBP/JPY"},
+  frxEURUSD_OTC:{dec:5, label:"EUR/USD OTC"},
+  frxGBPUSD_OTC:{dec:5, label:"GBP/USD OTC"},
+  frxUSDJPY_OTC:{dec:3, label:"USD/JPY OTC"},
+};
+
+/* ---------- App State ---------- */
+const S = {
+  sym: "frxEURUSD",
+  g: 60,                 // granularity (seconds)
+  dec: 5,
+  candles: [],           // {epoch, open, high, low, close, vol}
+  ticks: [],             // recent raw ticks for velocity
+  maxCandles: 240,
+  ws: null,
+  subId: null,
+  connected: false,
+  crosshair: {x:-1,y:-1,on:false},
+  sound: true,
+  floating: false,
+  lastSig: null,
+  sigCooldown: 0,
+  reconnectDelay: 1500,
+};
+
+/* ================================================================
+   DERIV WEBSOCKET — Live candle subscription
+   Docs: https://developer.deriv.com/docs/api
+   ================================================================ */
+function wsConnect(){
+  setConn("CONNECTING", "warn");
+  try{
+    if(S.ws){ try{S.ws.close();}catch(e){} }
+    S.ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
+  }catch(e){
+    setConn("OFFLINE · RETRY", "err");
+    setTimeout(wsConnect, S.reconnectDelay);
+    return;
+  }
+
+  S.ws.onopen = () => {
+    S.connected = true;
+    setConn("LIVE · " + SYMS[S.sym].label, "live");
+    subscribe();
+  };
+
+  S.ws.onmessage = (ev) => {
+    let msg;
+    try{ msg = JSON.parse(ev.data); }catch(e){ return; }
+    if(msg.error){
+      console.warn("Deriv error:", msg.error);
+      setConn("ERROR: " + msg.error.message, "err");
+      return;
+    }
+    if(msg.msg_type === "history"){
+      // initial candle history
+      const candles = msg.candles || msg.history && msg.history.candles;
+      if(msg.candles){
+        S.candles = msg.candles.map(c => ({
+          epoch: c.epoch,
+          open: +c.open, high: +c.high, low: +c.low, close: +c.close,
+          vol: 0
+        }));
+      }
+      renderAll();
+    }
+    else if(msg.msg_type === "candles"){
+      // subscription updates
+      const c = msg.candle;
+      if(!c) return;
+      const candle = {
+        epoch: +c.epoch,
+        open: +c.open, high: +c.high, low: +c.low, close: +c.close,
+        vol: 0
+      };
+      ingestCandle(candle);
+    }
+    else if(msg.msg_type === "tick"){
+      // also track raw ticks for velocity
+      const t = msg.tick;
+      if(t){
+        S.ticks.push({epoch:+t.epoch, price:+t.quote});
+        if(S.ticks.length>60) S.ticks.shift();
+      }
+    }
+    else if(msg.msg_type === "forget_all"){
+      // ok
+    }
+  };
+
+  S.ws.onclose = () => {
+    S.connected = false;
+    setConn("DISCONNECTED · RECONNECTING", "err");
+    setTimeout(wsConnect, S.reconnectDelay);
+  };
+
+  S.ws.onerror = () => {
+    setConn("ERROR · RETRY", "err");
+  };
+}
+
+function subscribe(){
+  // First forget any prior subscriptions
+  S.ws.send(JSON.stringify({forget_all:"candles"}));
+  // Request history + subscribe to new candles
+  S.ws.send(JSON.stringify({
+    ticks_history: S.sym,
+    adjust_start_time: 1,
+    count: S.maxCandles,
+    end: "latest",
+    start: 1,
+    style: "candles",
+    granularity: S.g,
+    subscribe: 1
+  }));
+}
+
+function setConn(txt, kind){
+  $("connTxt").textContent = txt;
+  const p = $("connPill");
+  p.classList.remove("live","warn","err");
+  p.classList.add(kind);
+}
+
+/* ---------- Ingest candle (update current or append new) ---------- */
+function ingestCandle(c){
+  const last = S.candles[S.candles.length-1];
+  if(!last || c.epoch > last.epoch){
+    S.candles.push(c);
+    if(S.candles.leng
